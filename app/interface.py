@@ -93,7 +93,6 @@ if tabs == "🏬 Inventory Forecasting":
 
             # Run the inventory forecasting based on the moving window logic
             with st.spinner("Running inventory forecast..."):
-                # Run the forecast based on the 12-week moving window logic
                 df_forecast = run_inventory_forecast(
                     sales_file_path=sales_file_path,  # Only passing the sales file path
                     warehouse_file_path=warehouse_file_path,  # Warehouse balance data
