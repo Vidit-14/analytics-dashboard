@@ -43,6 +43,10 @@ def run_inventory_forecast(sales_file_paths: list, warehouse_file_path: str) -> 
     # === STEP 5: Ensure 'Customer Shipment Date' is in datetime format ===
     combined_df['Customer Shipment Date'] = pd.to_datetime(combined_df['Customer Shipment Date'], errors='coerce')
 
+    # Check if 'Customer Shipment Date' is properly converted
+    if combined_df['Customer Shipment Date'].isnull().any():
+        raise ValueError("There are invalid date values in 'Customer Shipment Date'.")
+
     # === STEP 6: Implement Moving Window (12 Weeks of Data) ===
     today = datetime.today()
     cutoff_date = today - timedelta(weeks=12)
