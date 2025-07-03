@@ -1,34 +1,44 @@
 import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import streamlit as st
 import pandas as pd
 from ads.analyzer import run_ad_analysis
 from inventory.predictor import run_inventory_forecast
 
+# Setup paths for uploaded data
 UPLOADS_PATH = "data/uploads"
 OUTPUTS_PATH = "data/outputs"
 
 # Set up page
-st.set_page_config(page_title="Analytics Dashboard", layout="wide")
+st.set_page_config(page_title="📊 Vibrant Analytics Dashboard", layout="wide")
 st.title("📊 Vibrant Analytics Dashboard")
+st.markdown("Welcome to **Vibrant Analytics Dashboard**, your tool to analyze and forecast inventory and ad campaigns.")
 
-# Create sub-tabs for each module
-tabs = st.tabs(["📈 Ad Campaign Analyzer", "🏬 Inventory Forecasting"])
+# Add a custom logo (optional)
+st.image("https://your-logo-url.com/logo.png", width=200)  # Add your own logo URL here
+
+# Sidebar Navigation
+st.sidebar.title("Navigation")
+tabs = st.sidebar.radio("Choose a module", ["📈 Ad Campaign Analyzer", "🏬 Inventory Forecasting"])
 
 # -----------------------
 # Tab 1: Ad Campaign
 # -----------------------
-with tabs[0]:
+if tabs == "📈 Ad Campaign Analyzer":
     st.header("Ad Campaign Analyzer")
-    st.markdown("Upload 4 reports: Advertised, Targeting, Sales, and Orders.")
+    st.markdown("Upload the following 4 reports to analyze the ad campaigns:")
 
-    adv = st.file_uploader("1. Advertised Report", type="xlsx", key="adv")
-    tgt = st.file_uploader("2. Targeting Report", type="xlsx", key="tgt")
-    sales = st.file_uploader("3. Sales Report", type="xlsx", key="sales")
-    orders = st.file_uploader("4. Orders Report", type="xlsx", key="orders")
+    # Use columns for file upload
+    col1, col2 = st.columns(2)
+    with col1:
+        adv = st.file_uploader("1. Advertised Report", type="xlsx")
+        tgt = st.file_uploader("2. Targeting Report", type="xlsx")
+    with col2:
+        sales = st.file_uploader("3. Sales Report", type="xlsx")
+        orders = st.file_uploader("4. Orders Report", type="xlsx")
 
-    if st.button("▶️ Run Ad Analysis"):
+    # Add button with enhanced design
+    if st.button("▶️ Run Ad Analysis", help="Click to run the ad analysis on the uploaded reports"):
         if None in (adv, tgt, sales, orders):
             st.warning("⚠️ Please upload all 4 files.")
         else:
@@ -56,19 +66,24 @@ with tabs[0]:
                 with open(out_path, "rb") as f:
                     st.download_button("📥 Download Report", f, file_name="ASIN-Keyword-Final.xlsx")
 
-
 # -----------------------
 # Tab 2: Inventory Forecasting
 # -----------------------
-with tabs[1]:
+if tabs == "🏬 Inventory Forecasting":
     st.header("Inventory Forecasting")
-    st.markdown("Upload the 3 latest warehouse sales files (CSV).")
+    st.markdown("Upload the latest warehouse sales files (CSV) to forecast inventory demand:")
 
-    csv1 = st.file_uploader("Sales File 1", type="csv", key="csv1")
-    csv2 = st.file_uploader("Sales File 2", type="csv", key="csv2")
-    csv3 = st.file_uploader("Sales File 3", type="csv", key="csv3")
+    # Use columns for file upload
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        csv1 = st.file_uploader("Sales File 1", type="csv")
+    with col2:
+        csv2 = st.file_uploader("Sales File 2", type="csv")
+    with col3:
+        csv3 = st.file_uploader("Sales File 3", type="csv")
 
-    if st.button("▶️ Run Inventory Forecast"):
+    # Add button with enhanced design
+    if st.button("▶️ Run Inventory Forecast", help="Click to forecast inventory demand based on the uploaded sales files"):
         if None in (csv1, csv2, csv3):
             st.warning("⚠️ Please upload all 3 sales files.")
         else:
