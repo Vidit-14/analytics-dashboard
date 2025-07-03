@@ -1,32 +1,10 @@
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
-import os
-from geopy.distance import geodesic
-from geopy.geocoders import Nominatim
-from sklearn.preprocessing import LabelEncoder
-from xgboost import XGBRegressor
-import pickle
-import time
-from concurrent.futures import ThreadPoolExecutor
-
-
 def run_inventory_forecast(sales_file_path: str, warehouse_file_path: str, historical_data_path: str) -> pd.DataFrame:
     """
     Run inventory forecast with moving window of the most recent 12 weeks of data.
-
-    Args:
-    - sales_file_path (str): Path to the uploaded sales data file (CSV).
-    - warehouse_file_path (str): Path to the uploaded warehouse balance file (CSV).
-    - historical_data_path (str): Path to the historical sales data file (CSV).
-    
-    Returns:
-    - pd.DataFrame: Forecasted demand for the next week.
     """
-
     # === STEP 1: Load New Sales Data ===
     new_sales_df = pd.read_csv(sales_file_path)
-    new_sales_df['Customer Shipment Date'] = pd.to_datetime(new_sales_df['Customer Shipment Date'])
+    new_sales_df['Customer Shipment Date'] = pd.to_datetime(new_sales_df['Customer Shipment Date'], errors='coerce')  # Ensure datetime conversion
     new_sales_df = new_sales_df.rename(columns={'FC': 'Warehouse ID', 'Shipment To Postal Code': 'Ship Postal Code'})
     new_sales_df['Ship Postal Code'] = pd.to_numeric(new_sales_df['Ship Postal Code'], errors='coerce')
 
@@ -55,6 +33,8 @@ def run_inventory_forecast(sales_file_path: str, warehouse_file_path: str, histo
     # === STEP 6: Implement Moving Window (12 Weeks of Data) ===
     today = datetime.today()
     cutoff_date = today - timedelta(weeks=12)
+
+    # Now, ensure 'Customer Shipment Date' is correctly in datetime format before comparison
     combined_df = combined_df[combined_df['Customer Shipment Date'] >= cutoff_date]
 
     # === STEP 7: Update Historical Data with Combined Data ===
