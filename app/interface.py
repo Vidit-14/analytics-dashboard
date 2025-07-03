@@ -74,12 +74,12 @@ if tabs == "🏬 Inventory Forecasting":
     # Use columns for file upload (3 sales files + 1 warehouse balance file)
     col1, col2, col3 = st.columns(3)
     with col1:
-        csv1 = st.file_uploader("Sales File 1", type="csv")
+        csv1 = st.file_uploader("Sales File 1 (CSV)", type="csv")
     with col2:
-        csv2 = st.file_uploader("Sales File 2", type="csv")
+        csv2 = st.file_uploader("Sales File 2 (CSV)", type="csv")
     with col3:
-        csv3 = st.file_uploader("Sales File 3", type="csv")
-    warehouse_file = st.file_uploader("Warehouse Balance File", type="csv")
+        csv3 = st.file_uploader("Sales File 3 (CSV)", type="csv")
+    warehouse_file = st.file_uploader("Warehouse Balance File (CSV)", type="csv")
 
     # Add button with enhanced design
     if st.button("▶️ Run Inventory Forecast", help="Click to forecast inventory demand based on the uploaded sales and warehouse balance data"):

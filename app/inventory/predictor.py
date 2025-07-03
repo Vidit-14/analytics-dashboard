@@ -1,15 +1,14 @@
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
-import os
 from geopy.distance import geodesic
 from geopy.geocoders import Nominatim
 from sklearn.preprocessing import LabelEncoder
 from xgboost import XGBRegressor
+from datetime import datetime, timedelta
 import pickle
+import os
 import time
 from concurrent.futures import ThreadPoolExecutor
-
 
 def run_inventory_forecast(sales_file_paths: list, warehouse_file_path: str) -> pd.DataFrame:
     """
