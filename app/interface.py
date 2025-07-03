@@ -70,33 +70,34 @@ if tabs == "📈 Ad Campaign Analyzer":
 # -----------------------
 if tabs == "🏬 Inventory Forecasting":
     st.header("Inventory Forecasting")
-    st.markdown("Upload the latest warehouse sales files (CSV) to forecast inventory demand:")
+    st.markdown("Upload the latest warehouse sales file (CSV) and warehouse balance file (CSV) to forecast inventory demand:")
 
     # Use columns for file upload
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     with col1:
-        csv1 = st.file_uploader("Sales File 1", type="csv")
+        sales_file = st.file_uploader("Sales File (CSV)", type="csv")
     with col2:
-        csv2 = st.file_uploader("Sales File 2", type="csv")
-    with col3:
-        csv3 = st.file_uploader("Sales File 3", type="csv")
+        warehouse_file = st.file_uploader("Warehouse Balance File (CSV)", type="csv")
 
     # Add button with enhanced design
-    if st.button("▶️ Run Inventory Forecast", help="Click to forecast inventory demand based on the uploaded sales files"):
-        if None in (csv1, csv2, csv3):
-            st.warning("⚠️ Please upload all 3 sales files.")
+    if st.button("▶️ Run Inventory Forecast", help="Click to forecast inventory demand based on the uploaded sales and warehouse balance data"):
+        if None in (sales_file, warehouse_file):
+            st.warning("⚠️ Please upload both the sales file and warehouse balance file.")
         else:
             # Save uploads
             os.makedirs(f"{UPLOADS_PATH}/inventory", exist_ok=True)
-            input_paths = []
-            for i, f in enumerate([csv1, csv2, csv3]):
-                path = f"{UPLOADS_PATH}/inventory/sales_{i+1}.csv"
-                with open(path, "wb") as out: out.write(f.read())
-                input_paths.append(path)
+            sales_file_path = f"{UPLOADS_PATH}/inventory/sales_data.csv"
+            warehouse_file_path = f"{UPLOADS_PATH}/inventory/warehouse_balance_data.csv"
+            with open(sales_file_path, "wb") as out: out.write(sales_file.read())
+            with open(warehouse_file_path, "wb") as out: out.write(warehouse_file.read())
 
+            # Run the inventory forecasting based on the moving window logic
             with st.spinner("Running inventory forecast..."):
                 # Run the forecast based on the 12-week moving window logic
-                df_forecast = run_inventory_forecast(input_paths, historical_data_path=HISTORICAL_DATA_PATH)
+                df_forecast = run_inventory_forecast(
+                    file_paths=[sales_file_path],  # Only passing the sales file path
+                    historical_data_path=HISTORICAL_DATA_PATH  # The historical sales data is appended here
+                )
                 os.makedirs(f"{OUTPUTS_PATH}/inventory", exist_ok=True)
                 out_path = f"{OUTPUTS_PATH}/inventory/Predicted_Weekly_Demand_Integrated.xlsx"
                 df_forecast.to_excel(out_path, index=False)
