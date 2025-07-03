@@ -32,7 +32,12 @@ def run_inventory_forecast(sales_file_path: str, warehouse_file_path: str, histo
 
     # === STEP 2: Load Warehouse Balance Data ===
     warehouse_balance_df = pd.read_csv(warehouse_file_path)
-    warehouse_balance_df['Warehouse ID'] = warehouse_balance_df['Warehouse ID'].str.strip()
+
+    # Rename 'Location' to 'Warehouse ID' since that's the column name in the uploaded file
+    if 'Location' in warehouse_balance_df.columns:
+        warehouse_balance_df.rename(columns={'Location': 'Warehouse ID'}, inplace=True)
+    else:
+        raise ValueError("The 'Location' column is missing in the warehouse balance file.")
 
     # === STEP 3: Load Historical Data (March, April, May) ===
     if os.path.exists(historical_data_path):
