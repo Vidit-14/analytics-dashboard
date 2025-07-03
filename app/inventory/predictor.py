@@ -7,7 +7,7 @@ from datetime import datetime
 from geopy.distance import geodesic
 import os
 
-def run_forecast_with_coords(file_paths: list, coord_file: str = "postal_code_coords.csv") -> pd.DataFrame:
+def run_inventory_forecast(file_paths: list, coord_file: str = "postal_code_coords.csv") -> pd.DataFrame:
     # === STEP 1: Load and Combine CSVs ===
     dataframes = [pd.read_csv(file) for file in file_paths]
     df = pd.concat(dataframes, ignore_index=True)

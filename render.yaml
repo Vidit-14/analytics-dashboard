@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: analytics-app
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run app/interface.py --server.port 8080 --server.enableCORS false
