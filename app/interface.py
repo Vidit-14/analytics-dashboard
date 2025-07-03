@@ -8,7 +8,6 @@ from inventory.predictor import run_inventory_forecast
 # Setup paths for uploaded data
 UPLOADS_PATH = "data/uploads"
 OUTPUTS_PATH = "data/outputs"
-HISTORICAL_DATA_PATH = "data/historical_data/historical_sales_data.csv"  # Path to historical sales data
 
 # Set up page configuration
 st.set_page_config(page_title="📊 Vibrant Analytics Dashboard", layout="wide")
@@ -70,33 +69,39 @@ if tabs == "📈 Ad Campaign Analyzer":
 # -----------------------
 if tabs == "🏬 Inventory Forecasting":
     st.header("Inventory Forecasting")
-    st.markdown("Upload the latest warehouse sales file (CSV) and warehouse balance file (CSV) to forecast inventory demand:")
+    st.markdown("Upload the 3 latest warehouse sales files (CSV) and warehouse balance file (CSV) to forecast inventory demand:")
 
-    # Use columns for file upload (Only 2 buttons for sales and warehouse balance files)
-    col1, col2 = st.columns(2)
+    # Use columns for file upload (3 sales files + 1 warehouse balance file)
+    col1, col2, col3 = st.columns(3)
     with col1:
-        sales_file = st.file_uploader("Sales File (CSV)", type="csv")
+        csv1 = st.file_uploader("Sales File 1", type="csv")
     with col2:
-        warehouse_file = st.file_uploader("Warehouse Balance File (CSV)", type="csv")
+        csv2 = st.file_uploader("Sales File 2", type="csv")
+    with col3:
+        csv3 = st.file_uploader("Sales File 3", type="csv")
+    warehouse_file = st.file_uploader("Warehouse Balance File", type="csv")
 
     # Add button with enhanced design
     if st.button("▶️ Run Inventory Forecast", help="Click to forecast inventory demand based on the uploaded sales and warehouse balance data"):
-        if None in (sales_file, warehouse_file):
-            st.warning("⚠️ Please upload both the sales file and warehouse balance file.")
+        if None in (csv1, csv2, csv3, warehouse_file):
+            st.warning("⚠️ Please upload all 4 files.")
         else:
             # Save uploads
             os.makedirs(f"{UPLOADS_PATH}/inventory", exist_ok=True)
-            sales_file_path = f"{UPLOADS_PATH}/inventory/sales_data.csv"
-            warehouse_file_path = f"{UPLOADS_PATH}/inventory/warehouse_balance_data.csv"
-            with open(sales_file_path, "wb") as out: out.write(sales_file.read())
+            input_paths = []
+            for i, f in enumerate([csv1, csv2, csv3]):
+                path = f"{UPLOADS_PATH}/inventory/sales_{i+1}.csv"
+                with open(path, "wb") as out: out.write(f.read())
+                input_paths.append(path)
+
+            warehouse_file_path = f"{UPLOADS_PATH}/inventory/warehouse_balance.csv"
             with open(warehouse_file_path, "wb") as out: out.write(warehouse_file.read())
 
-            # Run the inventory forecasting based on the moving window logic
+            # Run the inventory forecasting based on the 12-week moving window logic
             with st.spinner("Running inventory forecast..."):
                 df_forecast = run_inventory_forecast(
-                    sales_file_path=sales_file_path,  # Only passing the sales file path
-                    warehouse_file_path=warehouse_file_path,  # Warehouse balance data
-                    historical_data_path=HISTORICAL_DATA_PATH  # The historical sales data is appended here
+                    sales_file_paths=input_paths,  # Sales files paths
+                    warehouse_file_path=warehouse_file_path  # Warehouse balance file path
                 )
                 os.makedirs(f"{OUTPUTS_PATH}/inventory", exist_ok=True)
                 out_path = f"{OUTPUTS_PATH}/inventory/Predicted_Weekly_Demand_Integrated.xlsx"

@@ -11,12 +11,12 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 
-def run_inventory_forecast(sales_file_path: str, warehouse_file_path: str, historical_data_path: str) -> pd.DataFrame:
+def run_inventory_forecast(sales_file_paths: list, warehouse_file_path: str) -> pd.DataFrame:
     """
     Run inventory forecast with moving window of the most recent 12 weeks of data.
     """
     # === STEP 1: Load New Sales Data ===
-    new_sales_df = pd.read_csv(sales_file_path)
+    new_sales_df = pd.concat([pd.read_csv(file) for file in sales_file_paths], ignore_index=True)
     new_sales_df['Customer Shipment Date'] = pd.to_datetime(new_sales_df['Customer Shipment Date'], errors='coerce')  # Ensure datetime conversion
     new_sales_df = new_sales_df.rename(columns={'FC': 'Warehouse ID', 'Shipment To Postal Code': 'Ship Postal Code'})
     new_sales_df['Ship Postal Code'] = pd.to_numeric(new_sales_df['Ship Postal Code'], errors='coerce')
@@ -31,6 +31,7 @@ def run_inventory_forecast(sales_file_path: str, warehouse_file_path: str, histo
         raise ValueError("The 'Location' column is missing in the warehouse balance file.")
 
     # === STEP 3: Load Historical Data (March, April, May) ===
+    historical_data_path = 'data/historical_data/historical_sales_data.csv'
     if os.path.exists(historical_data_path):
         historical_data_df = pd.read_csv(historical_data_path)
     else:
