@@ -1,16 +1,3 @@
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
-import os
-from geopy.distance import geodesic
-from geopy.geocoders import Nominatim
-from sklearn.preprocessing import LabelEncoder
-from xgboost import XGBRegressor
-import pickle
-import time
-from concurrent.futures import ThreadPoolExecutor
-
-
 def run_inventory_forecast(sales_file_path: str, warehouse_file_path: str, historical_data_path: str) -> pd.DataFrame:
     """
     Run inventory forecast with moving window of the most recent 12 weeks of data.
@@ -49,15 +36,18 @@ def run_inventory_forecast(sales_file_path: str, warehouse_file_path: str, histo
     combined_df = pd.concat([historical_data_df, new_sales_df], ignore_index=True)
     combined_df = combined_df.sort_values('Customer Shipment Date')
 
-    # === STEP 5: Implement Moving Window (12 Weeks of Data) ===
+    # === STEP 5: Ensure 'Customer Shipment Date' is in datetime format ===
+    combined_df['Customer Shipment Date'] = pd.to_datetime(combined_df['Customer Shipment Date'], errors='coerce')
+
+    # === STEP 6: Implement Moving Window (12 Weeks of Data) ===
     today = datetime.today()
     cutoff_date = today - timedelta(weeks=12)
     combined_df = combined_df[combined_df['Customer Shipment Date'] >= cutoff_date]
 
-    # === STEP 6: Update Historical Data with Combined Data ===
+    # === STEP 7: Update Historical Data with Combined Data ===
     combined_df.to_csv(historical_data_path, index=False)
 
-    # === STEP 7: Define FC-to-Pincode Mapping ===
+    # === STEP 8: Define FC-to-Pincode Mapping ===
     fc_to_pincode = {
         'SGAA': 781132, 'SGAC': 781101, 'SPAB': 801103, 'DEX3': 110044, 'PNQ2': 110044, 'DEX8': 110044,
         'AMD2': 382220, 'SAME': 387570, 'DEL2': 122105, 'DEL4': 122503, 'DEL5': 122413, 'DED3': 122506,
@@ -70,7 +60,7 @@ def run_inventory_forecast(sales_file_path: str, warehouse_file_path: str, histo
         'SCCE': 711313, 'XECP': 711401, 'PAX1': 800009
     }
 
-    # === STEP 8: Load or Generate Pincode Coordinates Mapping ===
+    # === STEP 9: Load or Generate Pincode Coordinates Mapping ===
     geolocator = Nominatim(user_agent="fc_distance_mapper")
     coord_cache_file = 'postal_code_coords.csv'
 
@@ -81,7 +71,7 @@ def run_inventory_forecast(sales_file_path: str, warehouse_file_path: str, histo
     else:
         pin_to_coord = {}
 
-    # === STEP 9: Geocode Function with Caching ===
+    # === STEP 10: Geocode Function with Caching ===
     def geocode_postal(pin):
         """Geocode postal code using geopy."""
         if pd.isna(pin) or pin in pin_to_coord:
@@ -104,7 +94,7 @@ def run_inventory_forecast(sales_file_path: str, warehouse_file_path: str, histo
             results = list(executor.map(geocode_postal, postal_codes))
         return results
 
-    # === STEP 10: Pre-fetch Coordinates for All Unique Postal Codes ===
+    # === STEP 11: Pre-fetch Coordinates for All Unique Postal Codes ===
     all_pins = set(combined_df['Ship Postal Code'].dropna().astype(int).unique()) | set(fc_to_pincode.values())
     coordinates = fetch_coordinates(all_pins)
 
@@ -116,7 +106,7 @@ def run_inventory_forecast(sales_file_path: str, warehouse_file_path: str, histo
     coord_df.to_csv(coord_cache_file, index=False)
     print(f"📍 Saved {len(coord_df)} pincode coordinates to '{coord_cache_file}'")
 
-    # === STEP 11: Adjust FC if Too Far From Shipping Address ===
+    # === STEP 12: Adjust FC if Too Far From Shipping Address ===
     def get_closest_fc(ship_postal, original_fc):
         """Find the closest FC based on distance from the shipping postal code."""
         try:
@@ -148,7 +138,7 @@ def run_inventory_forecast(sales_file_path: str, warehouse_file_path: str, histo
 
     combined_df['Warehouse ID'] = combined_df.apply(lambda row: get_closest_fc(row['Ship Postal Code'], row['Warehouse ID']), axis=1)
 
-    # === STEP 12: Prepare Data for ML Model ===
+    # === STEP 13: Prepare Data for ML Model ===
     combined_df['Year'] = combined_df['Customer Shipment Date'].dt.isocalendar().year
     combined_df['Week No'] = combined_df['Customer Shipment Date'].dt.isocalendar().week
 
@@ -168,7 +158,7 @@ def run_inventory_forecast(sales_file_path: str, warehouse_file_path: str, histo
     model = XGBRegressor()
     model.fit(X, y)
 
-    # === STEP 13: Make Predictions ===
+    # === STEP 14: Make Predictions ===
     latest_weeks = combined_df.groupby(['ASIN', 'Warehouse ID']).tail(3)
     input_rows = []
     for (asin, wh), group in latest_weeks.groupby(['ASIN', 'Warehouse ID']):
@@ -197,7 +187,7 @@ def run_inventory_forecast(sales_file_path: str, warehouse_file_path: str, histo
     else:
         forecast_df = pd.DataFrame(columns=['ASIN', 'Warehouse ID', 'Year', 'Week No', 'predicted demand'])
 
-    # === STEP 14: Fallback Demand = 1 for Active ASINs ===
+    # === STEP 15: Fallback Demand = 1 for Active ASINs ===
     activity_df = combined_df.groupby(['ASIN', 'Warehouse ID'])['Quantity'].sum().reset_index()
     activity_df = activity_df[activity_df['Quantity'] > 0]
     activity_df['Year'] = target_year
@@ -205,7 +195,7 @@ def run_inventory_forecast(sales_file_path: str, warehouse_file_path: str, histo
     activity_df['predicted demand'] = 1
     fallback_df = activity_df[['ASIN', 'Warehouse ID', 'Year', 'Week No', 'predicted demand']]
 
-    # === STEP 15: Merge Demand ===
+    # === STEP 16: Merge Demand ===
     final_demand = pd.concat([forecast_df, fallback_df], ignore_index=True)
     final_demand = final_demand.groupby(['ASIN', 'Warehouse ID', 'Year', 'Week No'])['predicted demand'].max().reset_index()
 
