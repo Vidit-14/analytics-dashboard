@@ -1,124 +1,189 @@
 import pandas as pd
 import numpy as np
-from xgboost import XGBRegressor
-from sklearn.preprocessing import LabelEncoder
-import pickle
-from datetime import datetime
 from geopy.distance import geodesic
+from geopy.geocoders import Nominatim
+from sklearn.preprocessing import LabelEncoder
+from xgboost import XGBRegressor
+from datetime import datetime, timedelta
+import pickle
 import os
+import time
 
-def run_inventory_forecast(file_paths: list, coord_file: str = None) -> pd.DataFrame:
-    # === STEP 1: Load and Combine CSVs ===
-    dataframes = [pd.read_csv(file) for file in file_paths]
-    df = pd.concat(dataframes, ignore_index=True)
-    df['Customer Shipment Date'] = pd.to_datetime(df['Customer Shipment Date'])
-    df = df.rename(columns={'FC': 'Warehouse ID'})
-    df = df[['Customer Shipment Date', 'ASIN', 'Quantity', 'Warehouse ID', 'Shipment To Postal Code']]
-    df['Shipment To Postal Code'] = pd.to_numeric(df['Shipment To Postal Code'], errors='coerce')
+def run_inventory_forecast(file_paths: list, historical_data_path: str = "historical_sales_data.csv") -> pd.DataFrame:
+    # === STEP 1: Load and Combine the New Sales Data ===
+    new_sales_df = pd.concat([pd.read_csv(file) for file in file_paths], ignore_index=True)
+    new_sales_df['Customer Shipment Date'] = pd.to_datetime(new_sales_df['Customer Shipment Date'])
+    new_sales_df = new_sales_df.rename(columns={'FC': 'Warehouse ID', 'Shipment To Postal Code': 'Ship Postal Code'})
+    new_sales_df['Ship Postal Code'] = pd.to_numeric(new_sales_df['Ship Postal Code'], errors='coerce')
 
-    # === STEP 2: Load postal code coordinates ===
-    if coord_file is None:
-        coord_file = os.path.join(os.path.dirname(__file__), "postal_code_coords.csv")
-    coord_df = pd.read_csv(coord_file)
-    coord_df = coord_df.dropna(subset=['Pincode', 'Latitude', 'Longitude'])
-    postal_coords = coord_df.set_index('Pincode')[['Latitude', 'Longitude']].to_dict('index')
+    # === STEP 2: Load the Historical Data (March, April, May) ===
+    if os.path.exists(historical_data_path):
+        historical_data_df = pd.read_csv(historical_data_path)
+    else:
+        historical_data_df = pd.DataFrame()  # Empty dataframe if no historical data exists
 
-    # === STEP 3: Adjust FC if too far from shipping address ===
+    # === STEP 3: Combine Historical and New Data ===
+    combined_df = pd.concat([historical_data_df, new_sales_df], ignore_index=True)
+    combined_df = combined_df.sort_values('Customer Shipment Date')
+
+    # === STEP 4: Implement Moving Window (12 Weeks of Data) ===
+    today = datetime.today()
+    cutoff_date = today - timedelta(weeks=12)
+    combined_df = combined_df[combined_df['Customer Shipment Date'] >= cutoff_date]
+
+    # === STEP 5: Update the Historical Data (for future use) ===
+    combined_df.to_csv(historical_data_path, index=False)
+
+    # === STEP 6: Define FC-to-Pincode Mapping ===
+    fc_to_pincode = {
+        'SGAA': 781132, 'SGAC': 781101, 'SPAB': 801103, 'DEX3': 110044, 'PNQ2': 110044, 'DEX8': 110044,
+        'AMD2': 382220, 'SAME': 387570, 'DEL2': 122105, 'DEL4': 122503, 'DEL5': 122413, 'DED3': 122506,
+        'DED5': 122103, 'SDEG': 122105, 'SDEB': 124108, 'XNRW': 124108, 'BLR4': 562149, 'BLR5': 562114,
+        'BLR7': 562107, 'BLR8': 562149, 'BLX1': 563160, 'XSAJ': 562132, 'BOM5': 421302, 'BOM7': 421302,
+        'ISK3': 421302, 'PNQ3': 410501, 'SBOB': 421101, 'XWAA': 421302, 'SBHF': 462030, 'SIDA': 453771,
+        'ATX1': 141113, 'SATB': 141113, 'JPX1': 302016, 'JPX2': 303007, 'HYD8': 500108, 'HYD3': 500108, 'SHYH': 500108,
+        'SHYB': 502279, 'XSAD': 502279, 'XSIP': 502279, 'MAA4': 601206, 'CJB1': 641201, 'SMAB': 601103,
+        'SCJF': 641402, 'XSIR': 601103, 'LKO1': 226401, 'SLKD': 226401, 'CCX1': 711322, 'CCX2': 711302,
+        'SCCE': 711313, 'XECP': 711401, 'PAX1': 800009
+    }
+
+    # === STEP 7: Load or Generate Pincode Coordinates Mapping ===
+    geolocator = Nominatim(user_agent="fc_distance_mapper")
+    coord_cache_file = 'postal_code_coords.csv'
+
+    # Check if we already have a cached coordinates file
+    if os.path.exists(coord_cache_file):
+        pin_to_coord_df = pd.read_csv(coord_cache_file)
+        pin_to_coord = {int(row['Pincode']): (row['Latitude'], row['Longitude']) for _, row in pin_to_coord_df.iterrows()}
+    else:
+        pin_to_coord = {}
+
+    # === STEP 8: Geocode Function with Caching ===
+    def geocode_postal(pin):
+        """Geocode postal code using geopy."""
+        if pd.isna(pin) or pin in pin_to_coord:
+            return pin_to_coord.get(pin, None)
+
+        try:
+            location = geolocator.geocode(f"India {int(pin)}", timeout=10)
+            if location:
+                coords = (location.latitude, location.longitude)
+                pin_to_coord[pin] = coords
+                return coords
+        except Exception as e:
+            print(f"Error geocoding postal code {pin}: {e}")
+
+        return None
+
+    def fetch_coordinates(postal_codes):
+        """Batch process postal codes using ThreadPoolExecutor."""
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            results = list(executor.map(geocode_postal, postal_codes))
+        return results
+
+    # === STEP 9: Pre-fetch Coordinates for All Unique Postal Codes ===
+    all_pins = set(combined_df['Ship Postal Code'].dropna().astype(int).unique()) | set(fc_to_pincode.values())
+    coordinates = fetch_coordinates(all_pins)
+
+    # Cache coordinates to CSV
+    coord_df = pd.DataFrame([
+        {'Pincode': pin, 'Latitude': coords[0], 'Longitude': coords[1]}
+        for pin, coords in zip(all_pins, coordinates) if coords is not None
+    ])
+    coord_df.to_csv(coord_cache_file, index=False)
+    print(f"📍 Saved {len(coord_df)} pincode coordinates to '{coord_cache_file}'")
+
+    # === STEP 10: Adjust FC if Too Far From Shipping Address ===
     def get_closest_fc(ship_postal, original_fc):
+        """Find the closest FC based on distance from the shipping postal code."""
         try:
-            ship_coord = postal_coords[int(ship_postal)]
+            ship_coord = pin_to_coord[int(ship_postal)]
         except:
-            return original_fc
+            return original_fc  # return original FC if no coordinates available
+
         try:
-            original_coord = postal_coords[int(original_fc)]
+            original_fc_pin = fc_to_pincode.get(original_fc)
+            original_coord = pin_to_coord.get(original_fc_pin)
+            if original_coord:
+                dist = geodesic((ship_coord[0], ship_coord[1]), (original_coord[0], original_coord[1])).km
+                if dist <= 300:
+                    return original_fc
         except:
-            return original_fc
-        dist = geodesic((ship_coord['Latitude'], ship_coord['Longitude']),
-                        (original_coord['Latitude'], original_coord['Longitude'])).km
-        if dist <= 300:
-            return original_fc
+            pass
+
+        # Find the nearest FC if distance > 300 km
         min_dist = float('inf')
         nearest_fc = original_fc
-        for fc_pincode, coord in postal_coords.items():
-            d = geodesic((ship_coord['Latitude'], ship_coord['Longitude']),
-                         (coord['Latitude'], coord['Longitude'])).km
-            if d < min_dist:
-                min_dist = d
-                nearest_fc = fc_pincode
+        for fc, fc_pin in fc_to_pincode.items():
+            fc_coords = pin_to_coord.get(fc_pin)
+            if fc_coords and ship_coord:
+                dist = geodesic((ship_coord[0], ship_coord[1]), (fc_coords[0], fc_coords[1])).km
+                if dist < min_dist:
+                    min_dist = dist
+                    nearest_fc = fc
         return nearest_fc
 
-    df['Warehouse ID'] = df.apply(lambda row: get_closest_fc(row['Shipment To Postal Code'], row['Warehouse ID']), axis=1)
+    combined_df['Warehouse ID'] = combined_df.apply(lambda row: get_closest_fc(row['Ship Postal Code'], row['Warehouse ID']), axis=1)
 
-    # === STEP 4: Week Encoding ===
-    df['Year'] = df['Customer Shipment Date'].dt.isocalendar().year
-    df['Week No'] = df['Customer Shipment Date'].dt.isocalendar().week
-    df = df[['Week No', 'Year', 'ASIN', 'Quantity', 'Warehouse ID']]
-    df['week_index'] = df.groupby(['Year', 'Week No']).ngroup()
-    max_index = df['week_index'].max()
-    df = df[df['week_index'] >= max_index - 9]
+    # === STEP 11: Prepare Data for ML Model ===
+    combined_df['Year'] = combined_df['Customer Shipment Date'].dt.isocalendar().year
+    combined_df['Week No'] = combined_df['Customer Shipment Date'].dt.isocalendar().week
 
-    # === STEP 5: Label Encoding ===
     asin_encoder = LabelEncoder()
     wh_encoder = LabelEncoder()
-    df['ASIN_Code'] = asin_encoder.fit_transform(df['ASIN'])
-    df['Warehouse_Code'] = wh_encoder.fit_transform(df['Warehouse ID'])
+    combined_df['ASIN_Code'] = asin_encoder.fit_transform(combined_df['ASIN'])
+    combined_df['Warehouse_Code'] = wh_encoder.fit_transform(combined_df['Warehouse ID'])
 
-    # === STEP 6: Lag Features ===
-    df = df.sort_values(['ASIN', 'Warehouse ID', 'Year', 'Week No'])
+    combined_df = combined_df.sort_values(['ASIN', 'Warehouse ID', 'Year', 'Week No'])
     for lag in [1, 2, 3]:
-        df[f'Lag_{lag}'] = df.groupby(['ASIN', 'Warehouse ID'])['Quantity'].shift(lag)
-    df_model = df.dropna()
+        combined_df[f'Lag_{lag}'] = combined_df.groupby(['ASIN', 'Warehouse ID'])['Quantity'].shift(lag)
 
-    # === STEP 7: Train XGBoost Model ===
+    df_model = combined_df.dropna()
     X = df_model[['ASIN_Code', 'Warehouse_Code', 'Lag_1', 'Lag_2', 'Lag_3']]
     y = df_model['Quantity']
+
     model = XGBRegressor()
     model.fit(X, y)
-    with open("xgboost_model.pkl", "wb") as f:
-        pickle.dump(model, f)
 
-    # === STEP 8: Prepare Input for Prediction ===
-    today = datetime.today()
-    target_year, target_week = today.isocalendar().year, today.isocalendar().week + 1
-    latest_weeks = df.groupby(['ASIN', 'Warehouse ID']).tail(3)
-    latest_weeks = latest_weeks.sort_values(['ASIN', 'Warehouse ID', 'Year', 'Week No'])
-
+    # === STEP 12: Make Predictions ===
+    latest_weeks = combined_df.groupby(['ASIN', 'Warehouse ID']).tail(3)
     input_rows = []
-    for (asin, warehouse), group in latest_weeks.groupby(['ASIN', 'Warehouse ID']):
+    for (asin, wh), group in latest_weeks.groupby(['ASIN', 'Warehouse ID']):
         if len(group) == 3:
-            quantities = group['Quantity'].values
+            lags = group['Quantity'].values[::-1]
             input_rows.append({
                 'ASIN': asin,
-                'Warehouse ID': warehouse,
+                'Warehouse ID': wh,
                 'ASIN_Code': asin_encoder.transform([asin])[0],
-                'Warehouse_Code': wh_encoder.transform([warehouse])[0],
-                'Lag_1': quantities[2],
-                'Lag_2': quantities[1],
-                'Lag_3': quantities[0]
+                'Warehouse_Code': wh_encoder.transform([wh])[0],
+                'Lag_1': lags[0],
+                'Lag_2': lags[1],
+                'Lag_3': lags[2]
             })
 
     input_df = pd.DataFrame(input_rows)
+    today = datetime.today()
+    target_year, target_week = today.isocalendar().year, today.isocalendar().week + 1
 
-    # === STEP 9: Prediction ===
     if not input_df.empty:
         X_pred = input_df[['ASIN_Code', 'Warehouse_Code', 'Lag_1', 'Lag_2', 'Lag_3']]
         input_df['predicted demand'] = np.ceil(model.predict(X_pred)).astype(int)
         input_df['Year'] = target_year
         input_df['Week No'] = target_week
-        output_df = input_df[['ASIN', 'Warehouse ID', 'Year', 'Week No', 'predicted demand']]
+        forecast_df = input_df[['ASIN', 'Warehouse ID', 'Year', 'Week No', 'predicted demand']]
     else:
-        output_df = pd.DataFrame(columns=['ASIN', 'Warehouse ID', 'Year', 'Week No', 'predicted demand'])
+        forecast_df = pd.DataFrame(columns=['ASIN', 'Warehouse ID', 'Year', 'Week No', 'predicted demand'])
 
-    # === STEP 10: Fallback 1-unit Prediction for Active ASIN-WH ===
-    activity_df = df.groupby(['ASIN', 'Warehouse ID'])['Quantity'].sum().reset_index()
+    # === STEP 13: Fallback Demand = 1 for Active ASINs ===
+    activity_df = combined_df.groupby(['ASIN', 'Warehouse ID'])['Quantity'].sum().reset_index()
     activity_df = activity_df[activity_df['Quantity'] > 0]
     activity_df['Year'] = target_year
     activity_df['Week No'] = target_week
     activity_df['predicted demand'] = 1
-    activity_df = activity_df[['ASIN', 'Warehouse ID', 'Year', 'Week No', 'predicted demand']]
+    fallback_df = activity_df[['ASIN', 'Warehouse ID', 'Year', 'Week No', 'predicted demand']]
 
-    # === STEP 11: Merge and Return ===
-    final_df = pd.concat([output_df, activity_df], ignore_index=True)
-    final_df = final_df.groupby(['ASIN', 'Warehouse ID', 'Year', 'Week No'])['predicted demand'].max().reset_index()
+    # === STEP 14: Merge Demand ===
+    final_demand = pd.concat([forecast_df, fallback_df], ignore_index=True)
+    final_demand = final_demand.groupby(['ASIN', 'Warehouse ID', 'Year', 'Week No'])['predicted demand'].max().reset_index()
 
-    return final_df
+    return final_demand

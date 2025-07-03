@@ -8,16 +8,14 @@ from inventory.predictor import run_inventory_forecast
 # Setup paths for uploaded data
 UPLOADS_PATH = "data/uploads"
 OUTPUTS_PATH = "data/outputs"
+HISTORICAL_DATA_PATH = "data/historical_data/historical_sales_data.csv"  # Path to historical sales data
 
-# Set up page
+# Set up page configuration
 st.set_page_config(page_title="📊 Vibrant Analytics Dashboard", layout="wide")
 st.title("📊 Vibrant Analytics Dashboard")
 st.markdown("Welcome to **Vibrant Analytics Dashboard**, your tool to analyze and forecast inventory and ad campaigns.")
 
-# Add a custom logo (optional)
-st.image("https://cdn.shopify.com/s/files/1/0610/1837/4329/files/Vibrant_LOGO_1.png?v=1651737805", width=200)  # Add your own logo URL here
-
-# Sidebar Navigation
+# Sidebar navigation
 st.sidebar.title("Navigation")
 tabs = st.sidebar.radio("Choose a module", ["📈 Ad Campaign Analyzer", "🏬 Inventory Forecasting"])
 
@@ -66,6 +64,7 @@ if tabs == "📈 Ad Campaign Analyzer":
                 with open(out_path, "rb") as f:
                     st.download_button("📥 Download Report", f, file_name="ASIN-Keyword-Final.xlsx")
 
+
 # -----------------------
 # Tab 2: Inventory Forecasting
 # -----------------------
@@ -96,7 +95,8 @@ if tabs == "🏬 Inventory Forecasting":
                 input_paths.append(path)
 
             with st.spinner("Running inventory forecast..."):
-                df_forecast = run_inventory_forecast(input_paths)
+                # Run the forecast based on the 12-week moving window logic
+                df_forecast = run_inventory_forecast(input_paths, historical_data_path=HISTORICAL_DATA_PATH)
                 os.makedirs(f"{OUTPUTS_PATH}/inventory", exist_ok=True)
                 out_path = f"{OUTPUTS_PATH}/inventory/Predicted_Weekly_Demand_Integrated.xlsx"
                 df_forecast.to_excel(out_path, index=False)
