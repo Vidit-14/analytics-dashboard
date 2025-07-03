@@ -3,8 +3,8 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import streamlit as st
 import pandas as pd
-from app.ads.analyzer import run_ad_analysis
-from app.inventory.predictor import run_inventory_forecast
+from ads.analyzer import run_ad_analysis
+from inventory.predictor import run_inventory_forecast
 
 UPLOADS_PATH = "data/uploads"
 OUTPUTS_PATH = "data/outputs"
