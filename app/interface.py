@@ -15,7 +15,7 @@ st.title("📊 Vibrant Analytics Dashboard")
 st.markdown("Welcome to **Vibrant Analytics Dashboard**, your tool to analyze and forecast inventory and ad campaigns.")
 
 # Add a custom logo (optional)
-st.image("https://your-logo-url.com/logo.png", width=200)  # Add your own logo URL here
+st.image("https://cdn.shopify.com/s/files/1/0610/1837/4329/files/Vibrant_LOGO_1.png?v=1651737805", width=200)  # Add your own logo URL here
 
 # Sidebar Navigation
 st.sidebar.title("Navigation")
