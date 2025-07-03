@@ -72,7 +72,7 @@ if tabs == "🏬 Inventory Forecasting":
     st.header("Inventory Forecasting")
     st.markdown("Upload the latest warehouse sales file (CSV) and warehouse balance file (CSV) to forecast inventory demand:")
 
-    # Use columns for file upload
+    # Use columns for file upload (Only 2 buttons for sales and warehouse balance files)
     col1, col2 = st.columns(2)
     with col1:
         sales_file = st.file_uploader("Sales File (CSV)", type="csv")
@@ -95,7 +95,8 @@ if tabs == "🏬 Inventory Forecasting":
             with st.spinner("Running inventory forecast..."):
                 # Run the forecast based on the 12-week moving window logic
                 df_forecast = run_inventory_forecast(
-                    file_paths=[sales_file_path],  # Only passing the sales file path
+                    sales_file_path=sales_file_path,  # Only passing the sales file path
+                    warehouse_file_path=warehouse_file_path,  # Warehouse balance data
                     historical_data_path=HISTORICAL_DATA_PATH  # The historical sales data is appended here
                 )
                 os.makedirs(f"{OUTPUTS_PATH}/inventory", exist_ok=True)
