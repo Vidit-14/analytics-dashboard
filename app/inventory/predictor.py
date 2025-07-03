@@ -7,7 +7,7 @@ from datetime import datetime
 from geopy.distance import geodesic
 import os
 
-def run_inventory_forecast(file_paths: list, coord_file: str = "postal_code_coords.csv") -> pd.DataFrame:
+def run_inventory_forecast(file_paths: list, coord_file: str = None) -> pd.DataFrame:
     # === STEP 1: Load and Combine CSVs ===
     dataframes = [pd.read_csv(file) for file in file_paths]
     df = pd.concat(dataframes, ignore_index=True)
@@ -17,6 +17,8 @@ def run_inventory_forecast(file_paths: list, coord_file: str = "postal_code_coor
     df['Shipment To Postal Code'] = pd.to_numeric(df['Shipment To Postal Code'], errors='coerce')
 
     # === STEP 2: Load postal code coordinates ===
+    if coord_file is None:
+        coord_file = os.path.join(os.path.dirname(__file__), "postal_code_coords.csv")
     coord_df = pd.read_csv(coord_file)
     coord_df = coord_df.dropna(subset=['Pincode', 'Latitude', 'Longitude'])
     postal_coords = coord_df.set_index('Pincode')[['Latitude', 'Longitude']].to_dict('index')
